@@ -381,6 +381,41 @@ int editorOpen(char *filename) {
     return 0;
 }
 
+void editorRowInsertChar(erow *row, int at, char c) {
+    if (at > row->size) {
+        int padlen = at - row->size;
+        row->chars = realloc(row->chars, sizeof(char) * (row->size+padlen+2));
+        row->chars[row->size+padlen+1] = '\0';
+        row->size += padlen + 1;
+    } else {
+        row->chars = realloc(row->chars, sizeof(char) * (row->size+2));
+        memmove(row->chars+at+1, row->chars+at, row->size-at+1);
+        row->size++;
+    }
+
+    row->chars[at] = c;
+    editorUpdateRow(row);
+    E.dirty++;
+}
+
+void editorInsertChar(int c) {
+    int filerow = E.rowoff+E.cy;
+    int filecol = E.coloff+E.cx;
+    erow *row = (filerow >= E.numrows) ? NULL : &E.row[filerow];
+
+    if (!row) {
+        while(E.numrows <= filerow)
+            editorInsertRow(E.numrows,"",0);
+    }
+    row = &E.row[filerow];
+    editorRowInsertChar(row, filecol,c);
+    if (E.cx == E.screencols-1)
+        E.coloff++;
+    else
+        E.cx++;
+    E.dirty++;
+}
+
 
 /* ============================= Terminal update ============================ */
 
@@ -660,6 +695,7 @@ void editorProcessKeypress(int fd) {
         /* Nothing to do for ESC in this mode. */
         break;
     default:
+        editorInsertChar(c);
         break;
     }
 
