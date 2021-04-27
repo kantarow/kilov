@@ -177,6 +177,8 @@ int editorReadKey(int fd) {
 
     while(1) {
         switch(c) {
+        case ENTER:
+            return ENTER;
         case ESC:    /* escape sequence */
             /* If this is just an ESC, we'll timeout here. */
             if (read(fd,seq,1) == 0) return ESC;
@@ -214,6 +216,7 @@ int editorReadKey(int fd) {
                 }
             }
             break;
+
         default:
             return c;
         }
@@ -382,17 +385,14 @@ int editorOpen(char *filename) {
 }
 
 void editorRowInsertChar(erow *row, int at, char c) {
-    if (at > row->size) {
-        int padlen = at - row->size;
-        row->chars = realloc(row->chars, sizeof(char) * (row->size+padlen+2));
-        row->chars[row->size+padlen+1] = '\0';
-        row->size += padlen + 1;
-    } else {
-        row->chars = realloc(row->chars, sizeof(char) * (row->size+2));
-        memmove(row->chars+at+1, row->chars+at, row->size-at+1);
-        row->size++;
-    }
+    row->chars = realloc(row->chars, sizeof(char) * (row->size+2));
 
+    if (at == row->size)
+        row->chars[row->size+1] = '\0';
+    else
+        memmove(row->chars+at+1, row->chars+at, row->size-at+1);
+
+    row->size++;
     row->chars[at] = c;
     editorUpdateRow(row);
     E.dirty++;
@@ -401,13 +401,8 @@ void editorRowInsertChar(erow *row, int at, char c) {
 void editorInsertChar(int c) {
     int filerow = E.rowoff+E.cy;
     int filecol = E.coloff+E.cx;
-    erow *row = (filerow >= E.numrows) ? NULL : &E.row[filerow];
 
-    if (!row) {
-        while(E.numrows <= filerow)
-            editorInsertRow(E.numrows,"",0);
-    }
-    row = &E.row[filerow];
+    erow *row = &E.row[filerow];
     editorRowInsertChar(row, filecol,c);
     if (E.cx == E.screencols-1)
         E.coloff++;
@@ -416,6 +411,19 @@ void editorInsertChar(int c) {
     E.dirty++;
 }
 
+void editorInsertNewLine() {
+    int filecol = E.coloff+E.cx;
+    int filerow = E.rowoff+E.cy;
+    erow *row = &E.row[filerow];
+    int remainlen = row->size - filecol;
+    editorInsertRow(filerow+1, row->chars+filecol, remainlen);
+
+    row->chars = realloc(row->chars, sizeof(char)*filecol);
+    if (filecol > 0)
+        row->chars[filecol] = '\0';
+    row->size = filecol;
+    editorUpdateRow(row);
+}
 
 /* ============================= Terminal update ============================ */
 
@@ -693,6 +701,9 @@ void editorProcessKeypress(int fd) {
         break;
     case ESC:
         /* Nothing to do for ESC in this mode. */
+        break;
+    case ENTER:
+        editorInsertNewLine();
         break;
     default:
         editorInsertChar(c);
