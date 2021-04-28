@@ -378,6 +378,11 @@ int editorOpen(char *filename) {
       line[--linelen] = '\0';
     editorInsertRow(E.numrows,line,linelen);
   }
+
+  if (E.numrows == 0) {
+    editorInsertRow(E.numrows, "", 0);
+  }
+
   free(line);
   fclose(fp);
   E.dirty = 0;
