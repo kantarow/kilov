@@ -423,6 +423,8 @@ void editorInsertNewLine() {
         row->chars[filecol] = '\0';
     row->size = filecol;
     editorUpdateRow(row);
+    E.cx = 0;
+    E.cy++;
 }
 
 /* ============================= Terminal update ============================ */
