@@ -428,6 +428,7 @@ void editorInsertNewLine() {
 
   editorInsertRow(filerow+1, row->chars+filecol, row->size-filecol);
 
+  row = &E.row[filerow];
   row->chars = realloc(row->chars, sizeof(char)*(filecol+1));
   row->chars[filecol] = '\0';
   row->size = filecol;
