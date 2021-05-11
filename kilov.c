@@ -70,6 +70,11 @@ typedef struct erow {
                          check. */
 } erow;
 
+typedef enum MODE {
+  NORMAL,
+  INSERT
+} mode;
+
 struct editorConfig {
   int cx,cy;  /* Cursor x and y position in characters */
   int rowoff;     /* Offset of row displayed. */
@@ -83,6 +88,7 @@ struct editorConfig {
   char *filename; /* Currently open filename */
   char statusmsg[80];
   time_t statusmsg_time;
+  mode current_mode;
 };
 
 static struct editorConfig E;
@@ -655,6 +661,20 @@ void editorSetStatusMessage(const char *fmt, ...) {
 
 /* =============================== Find mode ================================ */
 
+/* ========================= Editor mode management  ======================== */
+
+void editorChangeMode(mode next_mode) {
+  E.current_mode = next_mode;
+  switch(next_mode) {
+    case NORMAL:
+      editorSetStatusMessage("[NORMAL]");
+      break;
+    case INSERT:
+      editorSetStatusMessage("[INSERT]");
+      break;
+  }
+}
+
 /* ========================= Editor events handling  ======================== */
 
 /* Handle cursor position change because arrow keys were pressed. */
@@ -666,6 +686,7 @@ void editorMoveCursor(int key) {
 
   switch(key) {
     case ARROW_LEFT:
+    case 'h':
       if (E.cx == 0) {
         if (E.coloff) {
           E.coloff--;
@@ -684,6 +705,7 @@ void editorMoveCursor(int key) {
       }
       break;
     case ARROW_RIGHT:
+    case 'l':
       if (row && filecol < row->size) {
         if (E.cx == E.screencols-1) {
           E.coloff++;
@@ -701,6 +723,7 @@ void editorMoveCursor(int key) {
       }
       break;
     case ARROW_UP:
+    case 'k':
       if (E.cy == 0) {
         if (E.rowoff) E.rowoff--;
       } else {
@@ -708,6 +731,7 @@ void editorMoveCursor(int key) {
       }
       break;
     case ARROW_DOWN:
+    case 'j':
       if (filerow < E.numrows) {
         if (E.cy == E.screenrows-1) {
           E.rowoff++;
@@ -734,7 +758,7 @@ void editorMoveCursor(int key) {
 /* Process events arriving from the standard input, which is, the user
  * is typing stuff on the terminal. */
 #define KILO_QUIT_TIMES 3
-void editorProcessKeypress(int fd) {
+void editorProcessNormalModeKeypress(int fd) {
   /* When the file is modified, requires Ctrl-q to be pressed N times
    * before actually quitting. */
   static int quit_times = KILO_QUIT_TIMES;
@@ -773,6 +797,10 @@ void editorProcessKeypress(int fd) {
     case ARROW_DOWN:
     case ARROW_LEFT:
     case ARROW_RIGHT:
+    case 'h':
+    case 'j':
+    case 'k':
+    case 'l':
       editorMoveCursor(c);
       break;
     case CTRL_L: /* ctrl+l, clear screen */
@@ -781,19 +809,37 @@ void editorProcessKeypress(int fd) {
     case ESC:
       /* Nothing to do for ESC in this mode. */
       break;
+    case 'i':
+      editorChangeMode(INSERT);
+  }
+
+  quit_times = KILO_QUIT_TIMES; /* Reset it to the original value. */
+}
+
+void editorProcessInsertModeKeypress(int fd) {
+  int c = editorReadKey(fd);
+  switch(c) {
+    case ARROW_UP:
+    case ARROW_DOWN:
+    case ARROW_LEFT:
+    case ARROW_RIGHT:
+      editorMoveCursor(c);
+      break;
     case ENTER:
       editorInsertNewLine();
       break;
     case BACKSPACE:
       editorBackSpace();
       break;
+    case ESC:
+      editorChangeMode(NORMAL);
+      break;
     default:
       editorInsertChar(c);
       break;
   }
-
-  quit_times = KILO_QUIT_TIMES; /* Reset it to the original value. */
 }
+
 
 void updateWindowSize(void) {
   if (getWindowSize(STDIN_FILENO,STDOUT_FILENO,
@@ -829,7 +875,14 @@ int main(int argc, char **argv) {
       "HELP: Ctrl-Q = quit");
   while(1) {
     editorRefreshScreen();
-    editorProcessKeypress(STDIN_FILENO);
+    switch(E.current_mode) {
+      case NORMAL:
+        editorProcessNormalModeKeypress(STDIN_FILENO);
+        break;
+      case INSERT:
+        editorProcessInsertModeKeypress(STDIN_FILENO);
+        break;
+    }
   }
   return 0;
 }
