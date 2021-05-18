@@ -755,6 +755,24 @@ void editorMoveCursor(int key) {
   }
 }
 
+void editorMoveCursorToBOL() {
+  E.coloff = 0;
+  E.cx = 0;
+}
+
+void editorMoveCursorToEOL() {
+  erow row = E.row[E.cy + E.rowoff];
+  if (row.rsize < E.screencols)
+    E.cx = row.rsize;
+  else
+    E.cx = E.screencols;
+
+  int coloff = row.rsize - E.screencols;
+  if (coloff > 0)
+    E.coloff = coloff;
+  else
+    E.coloff = 0;
+}
 /* Process events arriving from the standard input, which is, the user
  * is typing stuff on the terminal. */
 #define KILO_QUIT_TIMES 3
@@ -803,6 +821,11 @@ void editorProcessNormalModeKeypress(int fd) {
     case 'l':
       editorMoveCursor(c);
       break;
+    case '0':
+      editorMoveCursorToBOL();
+      break;
+    case '$':
+      editorMoveCursorToEOL();
     case CTRL_L: /* ctrl+l, clear screen */
       /* Just refresht the line as side effect. */
       break;
