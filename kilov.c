@@ -453,11 +453,12 @@ fixcursor:
 
 
 void editorRowDelChar(erow *row, int at) {
-  if (at < row->size) {
-    memmove(row->chars+at-1, row->chars+at, row->size-at+1);
-  } else {
-    row->chars[row->size-1] = '\0';
+  if(row->size == 0) return;
+  if (at < row->size-1) {
+    memmove(row->chars+at, row->chars+at+1, row->size-at+1);
   }
+
+  row->chars[row->size-1] = '\0';
   row->chars = realloc(row->chars, row->size);
   row->size--;
 }
@@ -499,13 +500,25 @@ void editorBackSpace() {
     editorConcatLine(prev, row);
     editorDelRow(filerow);
   } else {
-    editorRowDelChar(row, filecol);
+    editorRowDelChar(row, filecol-1);
     if (E.cx == 0)
       E.coloff--;
     else
       E.cx--;
   }
+  editorUpdateRow(row);
+  E.dirty++;
+}
 
+void editorHandle_x() {
+  int filerow = E.rowoff + E.cy;
+  int filecol = E.coloff + E.cx;
+  erow *row = &E.row[filerow];
+
+  if(row->size == 0) return;
+  editorRowDelChar(row, filecol);
+  if (E.cx > 0 && E.cx == row->size)
+    E.cx--;
   editorUpdateRow(row);
   E.dirty++;
 }
@@ -667,6 +680,9 @@ void editorChangeMode(mode next_mode) {
   E.current_mode = next_mode;
   switch(next_mode) {
     case NORMAL:
+      if(E.cx+E.coloff == E.row[E.cy+E.rowoff].size && E.cx > 0) {
+        E.cx--;
+      }
       editorSetStatusMessage("[NORMAL]");
       break;
     case INSERT:
@@ -690,35 +706,18 @@ void editorMoveCursor(int key) {
       if (E.cx == 0) {
         if (E.coloff) {
           E.coloff--;
-        } else {
-          if (filerow > 0) {
-            E.cy--;
-            E.cx = E.row[filerow-1].size;
-            if (E.cx > E.screencols-1) {
-              E.coloff = E.cx-E.screencols+1;
-              E.cx = E.screencols-1;
-            }
-          }
         }
-      } else {
+      } else if (E.cx != 0) {
         E.cx -= 1;
       }
       break;
     case ARROW_RIGHT:
     case 'l':
-      if (row && filecol < row->size) {
+      if (row && filecol < row->size - (E.current_mode==NORMAL ? 1 : 0)) {
         if (E.cx == E.screencols-1) {
           E.coloff++;
         } else {
           E.cx += 1;
-        }
-      } else if (row && filecol == row->size) {
-        E.cx = 0;
-        E.coloff = 0;
-        if (E.cy == E.screenrows-1) {
-          E.rowoff++;
-        } else {
-          E.cy += 1;
         }
       }
       break;
@@ -752,6 +751,9 @@ void editorMoveCursor(int key) {
       E.coloff += E.cx;
       E.cx = 0;
     }
+  }
+  if(E.current_mode == NORMAL && E.cx+E.coloff == E.row[E.cy+E.rowoff].size && E.cx > 0) {
+    E.cx--;
   }
 }
 
@@ -826,6 +828,18 @@ void editorProcessNormalModeKeypress(int fd) {
       break;
     case '$':
       editorMoveCursorToEOL();
+      break;
+    case 'A':
+      editorMoveCursorToEOL();
+      editorChangeMode(INSERT);
+      break;
+    case 'I':
+      editorMoveCursorToBOL();
+      editorChangeMode(INSERT);
+      break;
+    case 'x':
+      editorHandle_x();
+      break;
     case CTRL_L: /* ctrl+l, clear screen */
       /* Just refresht the line as side effect. */
       break;
@@ -894,8 +908,7 @@ int main(int argc, char **argv) {
   initEditor();
   editorOpen(argv[1]);
   enableRawMode(STDIN_FILENO);
-  editorSetStatusMessage(
-      "HELP: Ctrl-Q = quit");
+  editorChangeMode(NORMAL);
   while(1) {
     editorRefreshScreen();
     switch(E.current_mode) {
