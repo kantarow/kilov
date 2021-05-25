@@ -848,6 +848,18 @@ void editorProcessNormalModeKeypress(int fd) {
       break;
     case 'i':
       editorChangeMode(INSERT);
+      break;
+    case 'o':
+      editorInsertRow(E.cy+E.rowoff+1, "", 0);
+      if (E.cy == E.screenrows-1) {
+        E.rowoff++;
+      } else {
+        E.cy++;
+      }
+      E.cx = 0;
+      E.coloff = 0;
+      editorChangeMode(INSERT);
+      break;
   }
 
   quit_times = KILO_QUIT_TIMES; /* Reset it to the original value. */
